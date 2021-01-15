@@ -42,6 +42,7 @@ test("should add correct semver label to commit", async () => {
     labels: defaultLabels,
     semVerLabels: versionLabels,
     logger: dummyLog(),
+    git: { getCommitsForPR: () => Promise.resolve([]) } as any,
   } as Auto);
 
   const logParseHooks = makeLogParseHooks();
@@ -52,6 +53,7 @@ test("should add correct semver label to commit", async () => {
   const commit = makeCommitFromMsg("fix: normal commit with no bump");
   expect(await logParseHooks.parseCommit.promise({ ...commit })).toStrictEqual({
     ...commit,
+    includeInChangelog: true,
     labels: ["patch"],
   });
 });
@@ -64,6 +66,7 @@ test("should add correct semver label to commit - feat", async () => {
     labels: defaultLabels,
     semVerLabels: versionLabels,
     logger: dummyLog(),
+    git: { getCommitsForPR: () => Promise.resolve([]) } as any,
   } as Auto);
 
   const logParseHooks = makeLogParseHooks();
@@ -74,6 +77,7 @@ test("should add correct semver label to commit - feat", async () => {
   const commit = makeCommitFromMsg("feat: normal commit with no bump");
   expect(await logParseHooks.parseCommit.promise({ ...commit })).toStrictEqual({
     ...commit,
+    includeInChangelog: true,
     labels: ["minor"],
   });
 });
@@ -86,6 +90,7 @@ test("should add major semver label to commit", async () => {
     labels: defaultLabels,
     semVerLabels: versionLabels,
     logger: dummyLog(),
+    git: { getCommitsForPR: () => Promise.resolve([]) } as any,
   } as Auto);
 
   const logParseHooks = makeLogParseHooks();
@@ -96,6 +101,7 @@ test("should add major semver label to commit", async () => {
   const commit = makeCommitFromMsg("BREAKING: normal commit with no bump");
   expect(await logParseHooks.parseCommit.promise({ ...commit })).toStrictEqual({
     ...commit,
+    includeInChangelog: true,
     labels: ["major"],
   });
 });
@@ -108,6 +114,7 @@ test("should add major semver label to commit - !", async () => {
     labels: defaultLabels,
     semVerLabels: versionLabels,
     logger: dummyLog(),
+    git: { getCommitsForPR: () => Promise.resolve([]) } as any,
   } as Auto);
 
   const logParseHooks = makeLogParseHooks();
@@ -118,11 +125,12 @@ test("should add major semver label to commit - !", async () => {
   const commit = makeCommitFromMsg("feat!: normal commit with no bump");
   expect(await logParseHooks.parseCommit.promise({ ...commit })).toStrictEqual({
     ...commit,
+    includeInChangelog: true,
     labels: ["major"],
   });
 });
 
-test("should not include label-less head commit if any other commit in PR has conventional commit message", async () => {
+test("should not include label-less head commit if all other commit in PR has skip", async () => {
   const commit = makeCommitFromMsg("Merge pull request #123 from some-pr\n\n");
   const conventionalCommitsPlugin = new ConventionalCommitsPlugin();
   const logParse = new LogParse();
@@ -134,7 +142,10 @@ test("should not include label-less head commit if any other commit in PR has co
     getFirstCommit: jest.fn(),
     getPr: jest.fn(),
     getCommitsForPR: () =>
-      Promise.resolve([{ sha: "1", commit: { message: "fix: child commit" } }]),
+      Promise.resolve([
+        { sha: "1", commit: { message: "chore: child commit" } },
+        { sha: "2", commit: { message: "chore: another commit" } },
+      ]),
   } as unknown) as Git;
   conventionalCommitsPlugin.apply({
     hooks: autoHooks,
@@ -294,6 +305,7 @@ test("should skip when not a fix/feat/breaking change commit", async () => {
     labels: defaultLabels,
     semVerLabels: versionLabels,
     logger: dummyLog(),
+    git: { getCommitsForPR: () => Promise.resolve([]) } as any,
   } as Auto);
 
   const logParseHooks = makeLogParseHooks();
@@ -304,6 +316,7 @@ test("should skip when not a fix/feat/breaking change commit", async () => {
   const commit = makeCommitFromMsg("chore: i should not trigger a release");
   expect(await logParseHooks.parseCommit.promise({ ...commit })).toStrictEqual({
     ...commit,
+    includeInChangelog: true,
     labels: ["skip-release"],
   });
 });

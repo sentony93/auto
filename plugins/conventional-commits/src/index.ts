@@ -137,18 +137,11 @@ export default class ConventionalCommitsPlugin implements IPlugin {
 
     auto.hooks.onCreateLogParse.tap(this.name, (logParse) => {
       logParse.hooks.parseCommit.tapPromise(this.name, async (commit) => {
-        if (!auto.semVerLabels) {
+        if (!auto.semVerLabels || !auto.git) {
           return commit;
         }
 
         try {
-          const label = await getBump(`${commit.subject}\n\n${commit.rawBody}`);
-
-          if (!label) {
-            return commit;
-          }
-
-          const incrementLabel = auto.semVerLabels.get(label);
           const allSemVerLabels = [
             auto.semVerLabels.get(SEMVER.major),
             auto.semVerLabels.get(SEMVER.minor),
@@ -158,10 +151,40 @@ export default class ConventionalCommitsPlugin implements IPlugin {
             []
           );
 
+          let bump = await getBump(`${commit.subject}\n\n${commit.rawBody}`);
+
           if (
-            incrementLabel &&
-            !commit.labels.some((l) => allSemVerLabels.includes(l))
+            !bump &&
+            commit.pullRequest &&
+            !commit.labels.some(l => allSemVerLabels.includes(l))
           ) {
+            const prCommits = await auto.git.getCommitsForPR(
+              commit.pullRequest.number
+            );
+            const prBumps = (
+              await Promise.all(prCommits.map((c) => getBump(c.commit.message)))
+            ).filter((bump): bump is
+              | SEMVER.major
+              | SEMVER.minor
+              | SEMVER.patch => Boolean(bump && bump !== "skip"));
+
+            if (prBumps.includes(SEMVER.major)) {
+              bump = SEMVER.major;
+            } else if (prBumps.includes(SEMVER.minor)) {
+              bump = SEMVER.minor;
+            } else if (prBumps.includes(SEMVER.patch)) {
+              bump = SEMVER.patch;
+            }
+          }
+
+          if (!bump) {
+            return commit;
+          }
+
+          const incrementLabel = auto.semVerLabels.get(bump);
+
+          if (incrementLabel && !commit.labels.some(l => allSemVerLabels.includes(l))) {
+            commit.includeInChangelog = true;
             commit.labels = [...commit.labels, incrementLabel[0]];
           }
         } catch (error) {
@@ -184,22 +207,22 @@ export default class ConventionalCommitsPlugin implements IPlugin {
           const prCommits = await auto.git.getCommitsForPR(
             commit.pullRequest.number
           );
-          let shouldOmit = false;
-
-          // Omit the commit if one of the commits in the PR contains a CC message since it will already be counted
-          await Promise.all(
+          const bumps = await Promise.all(
             prCommits.map(async (c) => {
               try {
                 const label = await getBump(c.commit.message);
-
-                if (label) {
-                  shouldOmit = true;
-                }
+                return label;
               } catch (error) {}
             })
           );
 
-          return shouldOmit;
+          // Omit the commit if all of the commits in the PR contains a skip message
+          return (
+            bumps.filter((bump): bump is
+              | SEMVER.major
+              | SEMVER.minor
+              | SEMVER.patch => Boolean(bump === "skip")).length > 0
+          );
         }
       });
     });

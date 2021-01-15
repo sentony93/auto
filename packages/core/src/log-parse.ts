@@ -61,6 +61,8 @@ export type IExtendedCommit = ICommit & {
   pullRequest?: IPullRequest;
   /** Labels associated with the commit */
   labels: string[];
+  /** Whether to force include the commit in the changelog */
+  includeInChangelog?: boolean;
 };
 
 /** Parse the PR information for the merge commit message */

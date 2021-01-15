@@ -144,7 +144,9 @@ export default class Release {
       );
     const uniqueCommits = allCommits.filter(
       (commit) =>
-        (commit.pullRequest || !allPrCommitHashes.includes(commit.hash)) &&
+        (commit.pullRequest ||
+          !allPrCommitHashes.includes(commit.hash) ||
+          commit.includeInChangelog === true) &&
         !commit.subject.includes("[skip ci]")
     );
 
@@ -200,8 +202,14 @@ export default class Release {
           const index = commitsInRelease.findIndex(
             (c) => c && c.hash === commit.hash
           );
+          const normalized = await logParse.normalizeCommit(commit);
 
-          commitsInRelease[index] = await logParse.normalizeCommit(commit);
+          // If a commit has includeInChangelog keep the title
+          if (commit.includeInChangelog && normalized) {
+            normalized.subject = commit.subject;
+          }
+
+          commitsInRelease[index] = normalized;
         })
     );
 
